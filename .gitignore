@@ -2,3 +2,7 @@
 ~*
 test/
 xlsxlist*
+driver.py
+*.sh
+extensions.txt
+test2.pdf
