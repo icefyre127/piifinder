@@ -1,10 +1,11 @@
 #!/usr/bin/python
+import argparse
 import re
 import sys
 import zipfile
 import os
 from pyPdf import PdfFileReader
-
+import time
 
 class SearchResult:
     def __init__(self,fileName,numMatches,matches):
@@ -13,6 +14,7 @@ class SearchResult:
         self.matches = matches
 
 def processPDF(fileName):
+#    print "File to process: " ,fileName
     pdfReader = PdfFileReader(file(fileName, "rb"))
     plainText = []
     for pageNum in range(pdfReader.getNumPages()):
@@ -20,7 +22,7 @@ def processPDF(fileName):
         plainText += page.extractText() + "\n\n"
 
     
-    return ''.join(plainText).encode("ascii")
+    return ''.join(plainText).encode("utf-8")
 
 
 def processOfficeXML(fileName):
@@ -52,9 +54,60 @@ def findMatches(fileName,data,pattern):
         return SearchResult(fileName, numMatches, uniqueMatches)
     return False
 
+def findQuickMatches(filename,data,pattern):
+    return re.search(pattern,data)
+
+    
     
     
 ssnPattern = "\d{3}-\d{2}-\d{4}"
+
+parser = argparse.ArgumentParser(description='Search for specific data patterns in file(s). Also supports PDF,docx and xlsx files')
+parser.add_argument('-R','--recursive',action='store_true', help='Include all files in directory and in subdirectories')
+parser.add_argument('-q','--quick',action='store_true', help='Use quick matching, just true or false without returning matched patterns')
+parser.add_argument('location',nargs='+', help='Location (e.g. file, directory) where to search for data')
+args = parser.parse_args()
+
+
+fileList = []
+searchFile = ""
+start = time.time()
+for item in args.location:
+    if len(item)>1 and item[-1] == os.path.sep:
+        item = item[0:-1]
+    
+    if os.path.isdir(item) and not args.recursive:
+        for fileItem in os.listdir(item):
+            if not os.path.isdir(item+os.path.sep+fileItem):
+                fileList.append(item+os.path.sep+fileItem)
+
+    
+    elif os.path.isdir(item):
+       for walkItem in os.walk(item):
+            for fileItem in walkItem[2]:
+                if walkItem[0][-1] == os.path.sep:
+                    fileList.append(walkItem[0][0:-1] + os.path.sep + fileItem)
+                else:
+                    fileList.append(walkItem[0]+os.path.sep+fileItem)
+    else:
+        fileList.append(item)
+
+        
+
+'''
+print "FILES TO SEARCH: "
+
+for f in  fileList:
+    print "\t", f
+'''   
+        
+'''
+        for walkItem in os.walk(item):
+            for fileItem in walkItem[2]:
+                print "\t%s%s%s" % (walkItem[0],os.path.sep,fileItem)
+'''
+
+
 
 
 '''
@@ -68,25 +121,41 @@ for item in myfiles:
 
 def printReport(results):
     if (results):
-        print "File Name: %s\nNumber of Matches: %s\nMatches found: %s\n" % (results.fileName, results.numMatches,results.matches)
+        print "File Name: %s  Number of Matches: %s  Matches found: %s " % (results.fileName, results.numMatches,results.matches)
 
 
-fileName = sys.argv[1]
-extension = fileName.split(".")[-1].lower()
 
-if extension == "xlsx" or extension == "docx":
-    fileContents = processOfficeXML(fileName)
+excludedTypes = ["exe","zip","7z","jpeg","jpg","gif","bmp","iso","bin","ini","lnk"]
+        
+for fileName in fileList:
+    extension = fileName.split(".")[-1].lower()
+
+    if extension in excludedTypes:
+        continue
+
+#    print "File being processed: ", fileName
+    if extension == "xlsx" or extension == "docx":
+        fileContents = processOfficeXML(fileName)
     
-elif extension == "pdf":
-    fileContents = processPDF(fileName)
-else:
-    fileContents = processFile(fileName)
+    elif extension == "pdf":
+        fileContents = processPDF(fileName)
+    else:
+        fileContents = processFile(fileName)
 
 
+    if args.quick:
+        results = findQuickMatches(fileName, fileContents,ssnPattern)
+    else:
+        results = findMatches(fileName, fileContents,ssnPattern)
     
-results = findMatches(fileName, fileContents,ssnPattern)
+    if not results:
+        print fileName,": No matches found."
+    else:        
+        if args.quick:
+            print fileName,": match found."
+        else:
+            printReport(results)
 
-if not results:
-    print "No matches found"
-else:
-    printReport(results)
+end = time.time()
+
+print (end - start)
