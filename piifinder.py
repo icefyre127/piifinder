@@ -13,16 +13,30 @@ class SearchResult:
         self.numMatches = numMatches
         self.matches = matches
 
-def processPDF(fileName):
-#    print "File to process: " ,fileName
-    pdfReader = PdfFileReader(file(fileName, "rb"))
-    plainText = []
-    for pageNum in range(pdfReader.getNumPages()):
-        page = pdfReader.getPage(pageNum)
-        plainText += page.extractText() + "\n\n"
+def processPDF(fileName,verbosity):
+    print "Processing: " ,fileName
+    try:
+        pdfReader = PdfFileReader(file(fileName, "rb"))
+        plainText = []
+        startTime = time.time()
+        for pageNum in range(pdfReader.getNumPages()):
+            page = pdfReader.getPage(pageNum)
+            #print page.extractText() + "\n\n"
 
-    
-    return ''.join(plainText).encode("utf-8")
+            if args.verbosity > 0:
+                print "\t",fileName,": page [",pageNum,"/",pdfReader.getNumPages(),"]"
+            plainText += page.extractText() + "\n\n"
+            timeElapsed = time.time()
+            if timeElapsed - startTime > 10:
+                print "\tFile taking too long to process. Timing out."
+        #        print plainText
+                return ''.join(plainText).encode("utf-8")
+            
+        return ''.join(plainText).encode("utf-8")
+    except Exception as e:
+        print fileName, ": READ ERROR. Error: ", e.args
+        return "ERROR"
+
 
 
 def processOfficeXML(fileName):
@@ -66,6 +80,7 @@ parser = argparse.ArgumentParser(description='Search for specific data patterns 
 parser.add_argument('-R','--recursive',action='store_true', help='Include all files in directory and in subdirectories')
 parser.add_argument('-q','--quick',action='store_true', help='Use quick matching, just true or false without returning matched patterns')
 parser.add_argument('location',nargs='+', help='Location (e.g. file, directory) where to search for data')
+parser.add_argument('-v','--verbosity', action="count",help="increase output verbosity")
 args = parser.parse_args()
 
 
@@ -138,11 +153,13 @@ for fileName in fileList:
         fileContents = processOfficeXML(fileName)
     
     elif extension == "pdf":
-        fileContents = processPDF(fileName)
+        fileContents = processPDF(fileName,args.verbosity)
     else:
         fileContents = processFile(fileName)
-
-
+        
+    if fileContents == "ERROR":
+        continue
+    
     if args.quick:
         results = findQuickMatches(fileName, fileContents,ssnPattern)
     else:
